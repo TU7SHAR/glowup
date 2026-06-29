@@ -8,7 +8,6 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
-import Script from "next/script";
 
 const plans = [
   {
@@ -160,10 +159,6 @@ function PremiumContent() {
 
   return (
     <div className="min-h-screen gradient-bg flex flex-col">
-      <Script
-        src="https://checkout.razorpay.com/v1/checkout.js"
-        strategy="beforeInteractive"
-      />
 
       <header className="px-6 py-4 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2">

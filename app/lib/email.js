@@ -1,83 +1,186 @@
 /**
- * Email Service using Resend
- * Sends glow-up reports and notifications
+ * Email Service for GlowUp AI
+ * Primary: Resend (if RESEND_API_KEY is set)
+ * Fallback: Gmail SMTP via Nodemailer (if SMTP_HOST or SMTP_USER is set)
+ *
+ * This allows shipping with zero paid services — just use a Gmail account.
  */
 
-import { Resend } from "resend";
+import nodemailer from "nodemailer";
+
+// ─── EMAIL PROVIDER SETUP ─────────────────────────────────────
 
 let resendClient = null;
+let smtpTransport = null;
 
-function getResend() {
+/**
+ * Determine which email provider to use:
+ * 1. Resend (paid, recommended for production)
+ * 2. Gmail SMTP / any SMTP (free fallback)
+ */
+function getEmailProvider() {
+  // Try Resend first
+  if (process.env.RESEND_API_KEY) {
+    return "resend";
+  }
+  // Fall back to SMTP (Gmail or custom)
+  if (process.env.SMTP_USER) {
+    return "smtp";
+  }
+  throw new Error(
+    "No email provider configured. Set RESEND_API_KEY or SMTP_USER/SMTP_PASSWORD in .env.local"
+  );
+}
+
+/**
+ * Get Resend client (lazy init)
+ */
+async function getResend() {
   if (!resendClient) {
-    const apiKey = process.env.RESEND_API_KEY;
-    if (!apiKey) throw new Error("RESEND_API_KEY not configured");
-    resendClient = new Resend(apiKey);
+    const { Resend } = await import("resend");
+    resendClient = new Resend(process.env.RESEND_API_KEY);
   }
   return resendClient;
 }
 
 /**
+ * Get SMTP transport (lazy init)
+ * Defaults to Gmail SMTP settings if SMTP_HOST is not set
+ */
+function getSMTPTransport() {
+  if (!smtpTransport) {
+    const host = process.env.SMTP_HOST || "smtp.gmail.com";
+    const port = parseInt(process.env.SMTP_PORT || "587");
+    const secure = port === 465; // true for 465, false for 587
+
+    smtpTransport = nodemailer.createTransport({
+      host,
+      port,
+      secure,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASSWORD, // Gmail: use App Password (16-char)
+      },
+    });
+  }
+  return smtpTransport;
+}
+
+// ─── UNIFIED SEND FUNCTION ────────────────────────────────────
+
+/**
+ * Send an email using the configured provider (Resend or SMTP)
+ * Automatically falls back to SMTP if Resend fails
+ */
+async function sendEmail({ to, subject, html }) {
+  const from = process.env.EMAIL_FROM || process.env.SMTP_USER || "noreply@glowupai.com";
+  const provider = getEmailProvider();
+
+  // Try primary provider
+  if (provider === "resend") {
+    try {
+      const resend = await getResend();
+      const { data, error } = await resend.emails.send({
+        from,
+        to: Array.isArray(to) ? to : [to],
+        subject,
+        html,
+      });
+
+      if (error) throw error;
+      console.log("[Email] Sent via Resend:", data?.id);
+      return { success: true, provider: "resend", id: data?.id };
+    } catch (resendError) {
+      console.error("[Email] Resend failed:", resendError.message);
+
+      // If SMTP is also configured, fall back to it
+      if (process.env.SMTP_USER) {
+        console.log("[Email] Falling back to SMTP...");
+        return sendViaSMTP({ to, from, subject, html });
+      }
+      throw resendError;
+    }
+  }
+
+  // SMTP primary
+  return sendViaSMTP({ to, from, subject, html });
+}
+
+/**
+ * Send via SMTP (Gmail or custom)
+ */
+async function sendViaSMTP({ to, from, subject, html }) {
+  const transport = getSMTPTransport();
+
+  try {
+    const info = await transport.sendMail({
+      from,
+      to: Array.isArray(to) ? to.join(", ") : to,
+      subject,
+      html,
+    });
+
+    console.log("[Email] Sent via SMTP:", info.messageId);
+    return { success: true, provider: "smtp", id: info.messageId };
+  } catch (smtpError) {
+    console.error("[Email] SMTP failed:", smtpError.message);
+    throw smtpError;
+  }
+}
+
+// ─── PUBLIC API ───────────────────────────────────────────────
+
+/**
  * Send the glow-up report email after payment
  */
 export async function sendReportEmail({ to, name, analysisId }) {
-  const resend = getResend();
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-
-  const { data, error } = await resend.emails.send({
-    from: process.env.EMAIL_FROM || "GlowUp AI <noreply@glowupai.com>",
-    to: [to],
+  return sendEmail({
+    to,
     subject: "Your GlowUp AI Report is Ready! ✨",
     html: buildReportEmailHTML(name, analysisId, appUrl),
   });
-
-  if (error) {
-    console.error("[Email] Failed to send report:", error);
-    throw error;
-  }
-
-  return data;
 }
 
 /**
  * Send payment confirmation email
  */
 export async function sendPaymentConfirmation({ to, name, plan, amount }) {
-  const resend = getResend();
-
-  const { data, error } = await resend.emails.send({
-    from: process.env.EMAIL_FROM || "GlowUp AI <noreply@glowupai.com>",
-    to: [to],
+  return sendEmail({
+    to,
     subject: "Payment Confirmed - GlowUp AI",
     html: buildPaymentEmailHTML(name, plan, amount),
   });
-
-  if (error) {
-    console.error("[Email] Failed to send confirmation:", error);
-    throw error;
-  }
-  return data;
 }
-
-
 
 /**
  * Send daily reminder for 30-day challenge
  */
 export async function sendDailyReminder({ to, name, dayNumber, tasks }) {
-  const resend = getResend();
-
-  const { data, error } = await resend.emails.send({
-    from: process.env.EMAIL_FROM || "GlowUp AI <noreply@glowupai.com>",
-    to: [to],
+  return sendEmail({
+    to,
     subject: `Day ${dayNumber}/30 - Your GlowUp Checklist 💪`,
     html: buildReminderEmailHTML(name, dayNumber, tasks),
   });
+}
 
-  if (error) {
-    console.error("[Email] Failed to send reminder:", error);
-    throw error;
+/**
+ * Verify email configuration is working (call on startup or health check)
+ */
+export async function verifyEmailConfig() {
+  try {
+    const provider = getEmailProvider();
+
+    if (provider === "smtp") {
+      const transport = getSMTPTransport();
+      await transport.verify();
+      return { configured: true, provider: "smtp", verified: true };
+    }
+
+    return { configured: true, provider: "resend", verified: true };
+  } catch (error) {
+    return { configured: false, provider: null, error: error.message };
   }
-  return data;
 }
 
 // ─── EMAIL TEMPLATES ──────────────────────────────────────────

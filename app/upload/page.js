@@ -40,8 +40,8 @@ export default function UploadPage() {
 
   const handlePhotoSelect = (file) => {
     if (file && file.type.startsWith("image/")) {
-      if (file.size > 10 * 1024 * 1024) {
-        setError("Photo must be under 10MB");
+      if (file.size > 5 * 1024 * 1024) {
+        setError("Photo must be under 5MB");
         return;
       }
       setPhoto(file);
@@ -181,7 +181,7 @@ export default function UploadPage() {
                   <div onDrop={handleDrop} onDragOver={(e) => { e.preventDefault(); setDragOver(true); }} onDragLeave={() => setDragOver(false)} onClick={() => fileInputRef.current?.click()} className={`border-2 border-dashed rounded-2xl p-12 text-center cursor-pointer transition-all ${dragOver ? "border-accent bg-accent/5" : "border-border hover:border-accent/50"}`}>
                     <Upload className="w-12 h-12 text-muted mx-auto mb-4" />
                     <p className="font-medium mb-1">Drop your photo here or click to browse</p>
-                    <p className="text-sm text-muted">JPG, PNG up to 10MB</p>
+                    <p className="text-sm text-muted">JPG, PNG up to 5MB</p>
                     <input ref={fileInputRef} type="file" accept="image/*" onChange={(e) => handlePhotoSelect(e.target.files[0])} className="hidden" />
                   </div>
                 ) : (

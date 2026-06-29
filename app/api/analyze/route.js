@@ -77,6 +77,24 @@ export async function POST(request) {
     const fileExt = file.type.split("/")[1] || "jpg";
     const filePath = `${sessionId}/${uuidv4()}.${fileExt}`;
 
+    // Ensure bucket exists (auto-create on first use)
+    const { data: buckets } = await supabase.storage.listBuckets();
+    const bucketExists = buckets?.some((b) => b.name === "selfies");
+    if (!bucketExists) {
+      const { error: createBucketError } = await supabase.storage.createBucket("selfies", {
+        public: false,
+        fileSizeLimit: 10 * 1024 * 1024, // 10MB
+        allowedMimeTypes: ["image/jpeg", "image/png", "image/webp", "image/heic"],
+      });
+      if (createBucketError && !createBucketError.message?.includes("already exists")) {
+        console.error("[API] Failed to create bucket:", createBucketError);
+        return NextResponse.json(
+          { error: "Storage configuration error. Please contact support." },
+          { status: 500 }
+        );
+      }
+    }
+
     const { error: uploadError } = await supabase.storage
       .from("selfies")
       .upload(filePath, buffer, {

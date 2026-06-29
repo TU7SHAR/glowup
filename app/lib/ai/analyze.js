@@ -119,11 +119,22 @@ GUIDELINES:
 - NEVER give an attractiveness score or rating number`;
 }
 
+// ─── HELPER: Check if API key is a real key (not placeholder) ─
+
+function isValidApiKey(key) {
+  if (!key) return false;
+  // Skip placeholder keys from .env.example
+  const placeholders = ["sk-your", "your-", "placeholder", "xxx", "test"];
+  return !placeholders.some((p) => key.toLowerCase().startsWith(p));
+}
+
 // ─── OPENAI VISION ANALYSIS ───────────────────────────────────
 
 async function analyzeWithOpenAI(imageBase64, age, gender, goal) {
   const apiKey = process.env.OPENAI_API_KEY;
-  if (!apiKey) throw new Error("OPENAI_API_KEY not configured");
+  if (!apiKey || !isValidApiKey(apiKey)) {
+    throw new Error("OPENAI_API_KEY not configured or is a placeholder");
+  }
 
   const response = await fetch("https://api.openai.com/v1/chat/completions", {
     method: "POST",
@@ -180,10 +191,15 @@ async function analyzeWithOpenAI(imageBase64, age, gender, goal) {
 
 async function analyzeWithGemini(imageBase64, age, gender, goal) {
   const apiKey = process.env.GOOGLE_AI_API_KEY;
-  if (!apiKey) throw new Error("GOOGLE_AI_API_KEY not configured");
+  if (!apiKey || !isValidApiKey(apiKey)) {
+    throw new Error("GOOGLE_AI_API_KEY not configured or is a placeholder");
+  }
+
+  // Use gemini-3.1-flash-lite (free tier, supports vision)
+  const model = process.env.GEMINI_MODEL || "gemini-3.1-flash-lite";
 
   const response = await fetch(
-    `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+    `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`,
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -224,7 +240,7 @@ async function analyzeWithGemini(imageBase64, age, gender, goal) {
 
   return {
     result: JSON.parse(content),
-    model: "gemini-2.0-flash",
+    model: model,
     tokens: data.usageMetadata?.totalTokenCount || 0,
   };
 }
@@ -242,8 +258,8 @@ async function analyzeWithGemini(imageBase64, age, gender, goal) {
 export async function analyzeImage(imageBase64, age, gender, goal) {
   const startTime = Date.now();
 
-  // Try OpenAI first
-  if (process.env.OPENAI_API_KEY) {
+  // Try OpenAI first (only if a real key is configured)
+  if (process.env.OPENAI_API_KEY && isValidApiKey(process.env.OPENAI_API_KEY)) {
     try {
       const result = await analyzeWithOpenAI(imageBase64, age, gender, goal);
       result.processingTime = Date.now() - startTime;
@@ -253,19 +269,21 @@ export async function analyzeImage(imageBase64, age, gender, goal) {
     }
   }
 
-  // Fallback to Gemini
-  if (process.env.GOOGLE_AI_API_KEY) {
+  // Gemini (primary free option)
+  if (process.env.GOOGLE_AI_API_KEY && isValidApiKey(process.env.GOOGLE_AI_API_KEY)) {
     try {
       const result = await analyzeWithGemini(imageBase64, age, gender, goal);
       result.processingTime = Date.now() - startTime;
       return result;
     } catch (error) {
       console.error("[AI] Gemini also failed:", error.message);
-      throw new Error("All AI providers failed. Please try again later.");
+      throw new Error("AI analysis failed. Please try again later.");
     }
   }
 
-  throw new Error("No AI API keys configured. Set OPENAI_API_KEY or GOOGLE_AI_API_KEY.");
+  throw new Error(
+    "No valid AI API keys configured. Get a free key at https://aistudio.google.com/apikey and set GOOGLE_AI_API_KEY in your .env.local"
+  );
 }
 
 // ─── VALIDATE AI RESPONSE ─────────────────────────────────────

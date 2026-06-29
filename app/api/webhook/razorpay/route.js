@@ -34,6 +34,19 @@ export async function POST(request) {
     switch (event.event) {
       case "payment.captured": {
         const payment = event.payload.payment.entity;
+
+        // FIX #5: Idempotency check — skip if already captured
+        const { data: existing } = await supabase
+          .from("payments")
+          .select("status")
+          .eq("razorpay_order_id", payment.order_id)
+          .single();
+
+        if (existing?.status === "captured") {
+          // Already processed — return 200 so Razorpay stops retrying
+          return NextResponse.json({ received: true, message: "Already processed" });
+        }
+
         await supabase
           .from("payments")
           .update({

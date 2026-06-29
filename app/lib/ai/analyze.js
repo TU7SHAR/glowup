@@ -142,6 +142,8 @@ async function analyzeWithOpenAI(imageBase64, age, gender, goal) {
       Authorization: `Bearer ${apiKey}`,
       "Content-Type": "application/json",
     },
+    // FIX: AbortController with 25s timeout to leave room for Gemini fallback
+    signal: AbortSignal.timeout(25000),
     body: JSON.stringify({
       model: "gpt-4o",
       messages: [
@@ -203,6 +205,8 @@ async function analyzeWithGemini(imageBase64, age, gender, goal) {
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      // FIX: 30s timeout — this is the last fallback so give it more time
+      signal: AbortSignal.timeout(30000),
       body: JSON.stringify({
         contents: [
           {

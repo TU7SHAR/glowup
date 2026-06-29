@@ -36,13 +36,57 @@ export async function GET(request) {
     }
 
 
-    // Check if user has paid
-    const { data: payment } = await supabase
+    // Check if user has paid — check by analysis_id OR session_id
+    // (covers cases where payment was made before login linked things)
+    let payment = null;
+
+    // First try: payment linked to this specific analysis
+    const { data: paymentByAnalysis } = await supabase
       .from("payments")
       .select("id, plan, status")
       .eq("analysis_id", analysisId)
       .eq("status", "captured")
       .single();
+
+    if (paymentByAnalysis) {
+      payment = paymentByAnalysis;
+    } else {
+      // Second try: payment linked to same session (covers edge cases)
+      const { data: paymentBySession } = await supabase
+        .from("payments")
+        .select("id, plan, status")
+        .eq("session_id", sessionId)
+        .eq("status", "captured")
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (paymentBySession) {
+        payment = paymentBySession;
+
+        // Link this payment to the analysis for future lookups
+        await supabase
+          .from("payments")
+          .update({ analysis_id: analysisId })
+          .eq("id", paymentBySession.id);
+      }
+    }
+
+    // Third try: check by "authorized" status (Razorpay webhook hasn't fired yet)
+    if (!payment) {
+      const { data: pendingPayment } = await supabase
+        .from("payments")
+        .select("id, plan, status")
+        .or(`analysis_id.eq.${analysisId},session_id.eq.${sessionId}`)
+        .in("status", ["authorized", "captured"])
+        .order("created_at", { ascending: false })
+        .limit(1)
+        .single();
+
+      if (pendingPayment) {
+        payment = pendingPayment;
+      }
+    }
 
     const isPaid = !!payment;
     const plan = payment?.plan || null;

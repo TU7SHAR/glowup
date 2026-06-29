@@ -126,7 +126,8 @@ function PremiumContent() {
                 router.push(`/results?id=${id}&unlocked=true`);
               } else {
                 // ENFORCE LOGIN after payment — to save report to their account
-                router.push(`/login?redirect=/results?id=${id}%26unlocked=true&reason=payment`);
+                const redirectUrl = `/results?id=${id}&unlocked=true`;
+                router.push(`/login?redirect=${encodeURIComponent(redirectUrl)}&reason=payment`);
               }
             } else {
               setError("Payment verification failed. Contact support.");

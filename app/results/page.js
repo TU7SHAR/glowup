@@ -50,7 +50,15 @@ function ResultsContent() {
         const sessionId = localStorage.getItem("glowup_session_id");
 
         if (!id || !sessionId) {
-          setError("No analysis found. Please upload a selfie first.");
+          // Try fetching latest analysis for logged-in user
+          const user = localStorage.getItem("glowup_user");
+          if (user) {
+            setError("Loading your latest report...");
+            // Redirect to fetch by user — for now show helpful message
+            setError("No analysis found for this session. Please upload a new selfie or check your email for the report link.");
+          } else {
+            setError("No analysis found. Please upload a selfie first.");
+          }
           setLoading(false);
           return;
         }

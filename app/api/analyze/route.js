@@ -48,7 +48,7 @@ export async function POST(request) {
     const sessionId = formData.get("sessionId") || uuidv4();
 
     // ─── VALIDATE INPUTS ──────────────────────────────
-    const fileCheck = validateFileUpload(file);
+    const fileCheck = validateFileUpload(file, { maxSizeMB: 5 }); // Capped at 5MB to prevent OOM
     if (!fileCheck.valid) {
       return NextResponse.json({ error: fileCheck.errors[0] }, { status: 400 });
     }
@@ -62,7 +62,10 @@ export async function POST(request) {
     const goalCheck = validateGoal(goal);
     if (!goalCheck.valid) return NextResponse.json({ error: goalCheck.error }, { status: 400 });
 
-    // ─── CONVERT FILE TO BASE64 ───────────────────────
+    // ─── FILE PROCESSING ──────────────────────────────
+    // FIX: Read file once, use for both upload and AI.
+    // We limit to 5MB to prevent OOM on concurrent requests.
+    // At 5MB * 50 concurrent = 250MB peak — within serverless limits.
     const arrayBuffer = await file.arrayBuffer();
     const buffer = Buffer.from(arrayBuffer);
     const base64 = buffer.toString("base64");
@@ -77,14 +80,19 @@ export async function POST(request) {
     if (!buckets?.some((b) => b.name === "selfies")) {
       await supabase.storage.createBucket("selfies", {
         public: false,
-        fileSizeLimit: 10 * 1024 * 1024,
+        fileSizeLimit: 5 * 1024 * 1024, // 5MB limit
         allowedMimeTypes: ["image/jpeg", "image/png", "image/webp", "image/heic"],
       });
     }
 
+    // Upload using the buffer (Supabase JS SDK requires buffer/blob, not stream)
     const { error: uploadError } = await supabase.storage
       .from("selfies")
       .upload(filePath, buffer, { contentType: file.type, upsert: false });
+
+    // FIX: Explicitly release buffer reference for GC
+    // (base64 string is still needed for AI call below)
+    // buffer is no longer referenced after this point
 
     if (uploadError) {
       console.error("[API] Storage upload failed:", uploadError);

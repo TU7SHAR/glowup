@@ -10,9 +10,15 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import DownloadReport from "../components/DownloadReport";
+import dynamic from "next/dynamic";
 import ShareResults from "../components/ShareResults";
 import UpsellSection from "../components/UpsellSection";
+
+// Lazy load DownloadReport (uses html2canvas + jspdf which are browser-only)
+const DownloadReport = dynamic(() => import("../components/DownloadReport"), {
+  ssr: false,
+  loading: () => <div className="px-5 py-3 rounded-xl bg-surface border border-border text-sm text-muted">Loading...</div>,
+});
 
 const categoryIcons = {
   hair: Scissors, skin: Droplets, beard: Shirt, eyebrows: Eye,
@@ -85,6 +91,7 @@ function ResultsContent() {
 
   const strengths = data?.strengths || [];
   const isPaid = data?.isPaid || unlocked;
+  const plan = data?.plan || null;
   const improvements = isPaid ? (data?.improvements || []) : [];
   const lockedImprovements = data?.lockedImprovements || [];
   const fullReport = data?.fullReport || {};

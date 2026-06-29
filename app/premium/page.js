@@ -120,7 +120,15 @@ function PremiumContent() {
 
             const verifyData = await verifyRes.json();
             if (verifyData.success) {
-              router.push(`/results?id=${id}&unlocked=true`);
+              // Check if user is logged in
+              const existingUser = localStorage.getItem("glowup_user");
+              if (existingUser) {
+                // Already logged in — go straight to results
+                router.push(`/results?id=${id}&unlocked=true`);
+              } else {
+                // ENFORCE LOGIN after payment — to save report to their account
+                router.push(`/login?redirect=/results?id=${id}%26unlocked=true&reason=payment`);
+              }
             } else {
               setError("Payment verification failed. Contact support.");
               setIsLoading(false);

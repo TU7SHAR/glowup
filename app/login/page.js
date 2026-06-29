@@ -20,8 +20,9 @@ function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const redirect = searchParams.get("redirect") || "/results";
+  const reason = searchParams.get("reason");
 
-  const [mode, setMode] = useState("login"); // login | signup
+  const [mode, setMode] = useState("signup"); // Default to signup for new users
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [name, setName] = useState("");
@@ -57,6 +58,14 @@ function LoginContent() {
         throw new Error(data.error || "Something went wrong");
       }
 
+      // Store user in localStorage for navbar + session persistence
+      const userData = {
+        id: data.user?.id || data.userId,
+        email: email,
+        name: mode === "signup" ? name : (data.user?.name || email.split("@")[0]),
+      };
+      localStorage.setItem("glowup_user", JSON.stringify(userData));
+
       if (mode === "signup") {
         setSuccess("Account created! You can now track your 30-day progress.");
         setTimeout(() => router.push(redirect), 1500);
@@ -91,11 +100,25 @@ function LoginContent() {
               <div className="w-14 h-14 rounded-full bg-accent/10 flex items-center justify-center mx-auto mb-4">
                 <User className="w-7 h-7 text-accent" />
               </div>
+
+              {/* Payment context banner */}
+              {reason === "payment" && (
+                <div className="mb-4 p-3 rounded-xl bg-success/10 border border-success/30 text-success text-sm">
+                  Payment successful! Create an account to access your report anytime.
+                </div>
+              )}
+
               <h1 className="text-2xl font-bold mb-2">
-                {mode === "login" ? "Welcome Back" : "Create Account"}
+                {reason === "payment"
+                  ? "Save Your Report"
+                  : mode === "login"
+                  ? "Welcome Back"
+                  : "Create Account"}
               </h1>
               <p className="text-sm text-muted">
-                {mode === "login"
+                {reason === "payment"
+                  ? "Sign up so you can always come back and view your full glow-up report"
+                  : mode === "login"
                   ? "Sign in to access your reports and track progress"
                   : "Sign up to save your results and start the 30-day challenge"}
               </p>
@@ -205,12 +228,14 @@ function LoginContent() {
               )}
             </div>
 
-            {/* Skip */}
-            <div className="mt-4 text-center">
-              <Link href={redirect} className="text-xs text-muted hover:text-foreground transition-colors">
-                Skip for now →
-              </Link>
-            </div>
+            {/* Skip — only if not from payment */}
+            {reason !== "payment" && (
+              <div className="mt-4 text-center">
+                <Link href={redirect} className="text-xs text-muted hover:text-foreground transition-colors">
+                  Skip for now →
+                </Link>
+              </div>
+            )}
           </div>
 
           {/* Benefits */}

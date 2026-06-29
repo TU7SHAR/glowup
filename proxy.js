@@ -1,10 +1,11 @@
 import { NextResponse } from "next/server";
 
 /**
- * Next.js Middleware
- * Handles security checks, rate limiting signals, and request validation
+ * Next.js 16 Proxy (formerly middleware.js)
+ * Runs before every matched request. Handles security checks,
+ * CSRF origin validation, and request-level headers.
  */
-export function middleware(request) {
+export function proxy(request) {
   const response = NextResponse.next();
   const { pathname } = request.nextUrl;
 
@@ -63,7 +64,6 @@ export function middleware(request) {
 }
 
 export const config = {
-  // Run middleware on all routes except static files and Next.js internals
   matcher: [
     "/((?!_next/static|_next/image|favicon.ico|.*\\.png$|.*\\.svg$|.*\\.ico$).*)",
   ],

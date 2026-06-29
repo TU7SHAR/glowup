@@ -1,17 +1,27 @@
 @import "tailwindcss";
 
+/* ═══════════════════════════════════════════════════════
+   GlowUp AI — Cold Luxury Theme
+   Inspired by: Rolex, La Mer, Tom Ford, Dyson
+   Palette: Deep obsidian + silver/platinum + muted gold + icy blue
+   ═══════════════════════════════════════════════════════ */
+
 :root {
-  --background: #0a0a0f;
-  --foreground: #f5f5f7;
-  --accent: #a855f7;
-  --accent-light: #c084fc;
-  --accent-dark: #7c3aed;
-  --surface: #1a1a2e;
-  --surface-light: #252540;
-  --muted: #a1a1aa;
-  --success: #22c55e;
-  --warning: #f59e0b;
-  --border: rgba(168, 85, 247, 0.2);
+  --background: #09090b;
+  --foreground: #fafafa;
+  --accent: #c8a961;
+  --accent-light: #dfc88a;
+  --accent-dark: #a68b3e;
+  --surface: #131316;
+  --surface-light: #1c1c21;
+  --muted: #71717a;
+  --success: #34d399;
+  --warning: #fbbf24;
+  --error: #f87171;
+  --border: rgba(200, 169, 97, 0.12);
+  --ice: #7dd3fc;
+  --ice-dark: #38bdf8;
+  --silver: #d4d4d8;
 }
 
 @theme inline {
@@ -25,7 +35,11 @@
   --color-muted: var(--muted);
   --color-success: var(--success);
   --color-warning: var(--warning);
+  --color-error: var(--error);
   --color-border: var(--border);
+  --color-ice: var(--ice);
+  --color-ice-dark: var(--ice-dark);
+  --color-silver: var(--silver);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -40,112 +54,111 @@ body {
   font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
 }
 
-/* Gradient text utility */
+/* ─── GRADIENT TEXT ──────────────────────────────── */
 .gradient-text {
-  background: linear-gradient(135deg, #a855f7 0%, #ec4899 50%, #f97316 100%);
+  background: linear-gradient(135deg, #c8a961 0%, #f5e6b8 45%, #7dd3fc 100%);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
 }
 
-/* Glow effect */
+/* ─── GLOW EFFECTS ───────────────────────────────── */
 .glow {
-  box-shadow: 0 0 20px rgba(168, 85, 247, 0.3),
-    0 0 60px rgba(168, 85, 247, 0.1);
+  box-shadow: 0 0 20px rgba(200, 169, 97, 0.15),
+    0 0 60px rgba(200, 169, 97, 0.05);
 }
 
 .glow-hover:hover {
-  box-shadow: 0 0 30px rgba(168, 85, 247, 0.4),
-    0 0 80px rgba(168, 85, 247, 0.2);
+  box-shadow: 0 0 30px rgba(200, 169, 97, 0.25),
+    0 0 80px rgba(200, 169, 97, 0.08);
 }
 
-/* Glass morphism */
+.glow-ice {
+  box-shadow: 0 0 20px rgba(125, 211, 252, 0.15),
+    0 0 60px rgba(125, 211, 252, 0.05);
+}
+
+/* ─── GLASS MORPHISM ─────────────────────────────── */
 .glass {
-  background: rgba(26, 26, 46, 0.7);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(168, 85, 247, 0.15);
+  background: rgba(19, 19, 22, 0.8);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(200, 169, 97, 0.08);
 }
 
-/* Animated gradient background */
+.glass-ice {
+  background: rgba(19, 19, 22, 0.8);
+  backdrop-filter: blur(16px);
+  border: 1px solid rgba(125, 211, 252, 0.1);
+}
+
+/* ─── GRADIENT BACKGROUNDS ───────────────────────── */
 .gradient-bg {
-  background: linear-gradient(
-    135deg,
-    #0a0a0f 0%,
-    #1a0a2e 25%,
-    #0a0a1f 50%,
-    #1a0a2e 75%,
-    #0a0a0f 100%
-  );
-  background-size: 400% 400%;
-  animation: gradientShift 15s ease infinite;
+  background: radial-gradient(
+      ellipse 80% 60% at 50% -20%,
+      rgba(200, 169, 97, 0.06) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 60% 40% at 80% 80%,
+      rgba(125, 211, 252, 0.03) 0%,
+      transparent 50%
+    ),
+    var(--background);
 }
 
-@keyframes gradientShift {
-  0% {
-    background-position: 0% 50%;
-  }
-  50% {
-    background-position: 100% 50%;
-  }
-  100% {
-    background-position: 0% 50%;
-  }
-}
-
-/* Pulse animation for CTA */
+/* ─── CTA PULSE ──────────────────────────────────── */
 .pulse-glow {
-  animation: pulseGlow 2s ease-in-out infinite;
+  animation: pulseGold 3s ease-in-out infinite;
 }
 
-@keyframes pulseGlow {
-  0%,
-  100% {
-    box-shadow: 0 0 20px rgba(168, 85, 247, 0.4);
+@keyframes pulseGold {
+  0%, 100% {
+    box-shadow: 0 0 15px rgba(200, 169, 97, 0.3);
   }
   50% {
-    box-shadow: 0 0 40px rgba(168, 85, 247, 0.6),
-      0 0 80px rgba(168, 85, 247, 0.2);
+    box-shadow: 0 0 30px rgba(200, 169, 97, 0.5),
+      0 0 60px rgba(200, 169, 97, 0.1);
   }
 }
 
-/* Scan line animation */
+/* ─── SCAN LINE (analysis page) ──────────────────── */
 @keyframes scanLine {
-  0% {
-    transform: translateY(-100%);
-  }
-  100% {
-    transform: translateY(100%);
-  }
+  0% { transform: translateY(-100%); }
+  100% { transform: translateY(100%); }
 }
 
 .scan-line {
-  animation: scanLine 2s linear infinite;
+  animation: scanLine 2.5s linear infinite;
 }
 
-/* Progress bar animation */
-@keyframes progressFill {
-  from {
-    width: 0%;
-  }
-  to {
-    width: 100%;
-  }
+/* ─── SUBTLE GRAIN TEXTURE ───────────────────────── */
+.grain::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.015;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
+  z-index: 9999;
 }
 
-/* Scrollbar styling */
+/* ─── SCROLLBAR ──────────────────────────────────── */
 ::-webkit-scrollbar {
-  width: 6px;
+  width: 5px;
 }
-
 ::-webkit-scrollbar-track {
   background: var(--background);
 }
-
 ::-webkit-scrollbar-thumb {
   background: var(--accent-dark);
   border-radius: 3px;
 }
-
 ::-webkit-scrollbar-thumb:hover {
   background: var(--accent);
+}
+
+/* ─── SELECTION ──────────────────────────────────── */
+::selection {
+  background: rgba(200, 169, 97, 0.2);
+  color: var(--foreground);
 }

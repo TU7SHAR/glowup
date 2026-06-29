@@ -80,6 +80,21 @@ function PremiumContent() {
       if (!res.ok) throw new Error(order.error);
 
       // Open Razorpay checkout
+      if (typeof window.Razorpay === "undefined") {
+        // Script hasn't loaded yet — load it manually
+        await new Promise((resolve, reject) => {
+          if (typeof window.Razorpay !== "undefined") {
+            resolve();
+            return;
+          }
+          const script = document.createElement("script");
+          script.src = "https://checkout.razorpay.com/v1/checkout.js";
+          script.onload = resolve;
+          script.onerror = () => reject(new Error("Failed to load Razorpay. Check your internet connection."));
+          document.body.appendChild(script);
+        });
+      }
+
       const options = {
         key: order.key,
         amount: order.amount,
@@ -108,9 +123,11 @@ function PremiumContent() {
               router.push(`/results?id=${id}&unlocked=true`);
             } else {
               setError("Payment verification failed. Contact support.");
+              setIsLoading(false);
             }
           } catch (e) {
             setError("Verification error. Your payment is safe - contact support.");
+            setIsLoading(false);
           }
         },
         modal: {
@@ -121,10 +138,13 @@ function PremiumContent() {
       };
 
       const rzp = new window.Razorpay(options);
+      rzp.on("payment.failed", function (response) {
+        setError(`Payment failed: ${response.error.description}`);
+        setIsLoading(false);
+      });
       rzp.open();
     } catch (e) {
       setError(e.message);
-    } finally {
       setIsLoading(false);
     }
   };
@@ -132,7 +152,10 @@ function PremiumContent() {
 
   return (
     <div className="min-h-screen gradient-bg flex flex-col">
-      <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
+      <Script
+        src="https://checkout.razorpay.com/v1/checkout.js"
+        strategy="beforeInteractive"
+      />
 
       <header className="px-6 py-4 flex items-center justify-between">
         <Link href="/" className="flex items-center gap-2">

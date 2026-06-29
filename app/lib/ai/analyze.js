@@ -183,7 +183,7 @@ async function analyzeWithOpenAI(imageBase64, age, gender, goal) {
   if (!content) throw new Error("Empty response from OpenAI");
 
   return {
-    result: JSON.parse(content),
+    result: JSON.parse(cleanJsonResponse(content)),
     model: "gpt-4o",
     tokens: data.usage?.total_tokens || 0,
   };
@@ -242,11 +242,42 @@ async function analyzeWithGemini(imageBase64, age, gender, goal) {
 
   if (!content) throw new Error("Empty response from Gemini");
 
+  // FIX: Gemini sometimes wraps JSON in markdown code fences despite responseMimeType
+  const cleanedContent = cleanJsonResponse(content);
+
   return {
-    result: JSON.parse(content),
+    result: JSON.parse(cleanedContent),
     model: model,
     tokens: data.usageMetadata?.totalTokenCount || 0,
   };
+}
+
+// ─── HELPER: Clean JSON response from AI ──────────────────────
+
+/**
+ * AI models sometimes wrap JSON in markdown code fences or add trailing text.
+ * This strips all non-JSON content to get clean parseable JSON.
+ */
+function cleanJsonResponse(text) {
+  let cleaned = text.trim();
+
+  // Remove markdown code fences: ```json ... ``` or ``` ... ```
+  if (cleaned.startsWith("```")) {
+    // Remove opening fence (with optional language tag)
+    cleaned = cleaned.replace(/^```(?:json)?\s*\n?/, "");
+    // Remove closing fence
+    cleaned = cleaned.replace(/\n?```\s*$/, "");
+  }
+
+  // Find the outermost JSON object (first { to last })
+  const firstBrace = cleaned.indexOf("{");
+  const lastBrace = cleaned.lastIndexOf("}");
+
+  if (firstBrace !== -1 && lastBrace !== -1 && lastBrace > firstBrace) {
+    cleaned = cleaned.slice(firstBrace, lastBrace + 1);
+  }
+
+  return cleaned.trim();
 }
 
 // ─── MAIN ANALYSIS FUNCTION ───────────────────────────────────

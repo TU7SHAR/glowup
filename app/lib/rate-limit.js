@@ -36,28 +36,41 @@ export async function checkRateLimit(identifier, action, maxRequests = 5, window
  */
 async function checkRateLimitUpstash(identifier, action, maxRequests, windowSeconds) {
   try {
-    const { Ratelimit } = await import("@upstash/ratelimit");
-    const { Redis } = await import("@upstash/redis");
+    // Use plain fetch to Upstash REST API — no npm packages needed
+    const url = process.env.UPSTASH_REDIS_REST_URL;
+    const token = process.env.UPSTASH_REDIS_REST_TOKEN;
+    const key = `glowup:${action}:${identifier}`;
+    const now = Date.now();
+    const windowMs = windowSeconds * 1000;
 
-    const redis = new Redis({
-      url: process.env.UPSTASH_REDIS_REST_URL,
-      token: process.env.UPSTASH_REDIS_REST_TOKEN,
+    // MULTI: Remove old entries + add current + count
+    const pipeline = [
+      ["ZREMRANGEBYSCORE", key, "0", String(now - windowMs)],
+      ["ZADD", key, String(now), `${now}:${Math.random()}`],
+      ["ZCARD", key],
+      ["EXPIRE", key, String(windowSeconds + 10)],
+    ];
+
+    const response = await fetch(`${url}/pipeline`, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${token}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify(pipeline),
+      signal: AbortSignal.timeout(3000), // 3s max for rate limit check
     });
 
-    const ratelimit = new Ratelimit({
-      redis,
-      limiter: Ratelimit.slidingWindow(maxRequests, `${windowSeconds} s`),
-      analytics: true,
-      prefix: `glowup:${action}`,
-    });
+    if (!response.ok) throw new Error(`Upstash HTTP ${response.status}`);
 
-    const result = await ratelimit.limit(identifier);
+    const results = await response.json();
+    const count = results[2]?.result || 0;
 
-    return {
-      allowed: result.success,
-      remaining: result.remaining,
-      retryAfter: result.success ? 0 : Math.ceil((result.reset - Date.now()) / 1000),
-    };
+    if (count > maxRequests) {
+      return { allowed: false, remaining: 0, retryAfter: windowSeconds };
+    }
+
+    return { allowed: true, remaining: Math.max(0, maxRequests - count) };
   } catch (error) {
     console.warn("[RateLimit] Upstash failed, failing open:", error.message);
     return { allowed: true, remaining: maxRequests };

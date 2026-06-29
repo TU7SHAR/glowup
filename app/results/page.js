@@ -6,9 +6,13 @@ import {
   Sparkles, Check, Lock, ArrowRight, Star, TrendingUp,
   Scissors, Droplets, Eye, Glasses, Palette, Shirt,
   Camera, Heart, ShoppingBag, Calendar, Zap, Loader2,
+  Crown, User,
 } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
+import DownloadReport from "../components/DownloadReport";
+import ShareResults from "../components/ShareResults";
+import UpsellSection from "../components/UpsellSection";
 
 const categoryIcons = {
   hair: Scissors, skin: Droplets, beard: Shirt, eyebrows: Eye,
@@ -254,6 +258,90 @@ function ResultsContent() {
               Unlock Full Report — ₹199
             </Link>
             <p className="text-center text-xs text-muted mt-3">One-time payment &bull; Instant access &bull; Money-back guarantee</p>
+          </motion.div>
+        )}
+
+        {/* ── PAID: Download + Share + Plan Badge ── */}
+        {isPaid && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.9 }} className="mb-8">
+            {/* Plan badge */}
+            <div className="glass rounded-xl p-4 mb-4 flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Crown className="w-4 h-4 text-warning" />
+                <span className="text-sm font-medium">
+                  {plan === "monthly" ? "Monthly Premium" : plan === "coach" ? "30-Day Coach" : "Glow-Up Report"}
+                </span>
+              </div>
+              <Link href="/login?redirect=/results" className="flex items-center gap-1 text-xs text-accent hover:underline">
+                <User className="w-3 h-3" /> Save to account
+              </Link>
+            </div>
+
+            {/* Download + Share buttons */}
+            <div className="flex flex-wrap gap-3">
+              <DownloadReport analysisId={data?.id} data={data} />
+              <ShareResults analysisId={data?.id} improvementPotential={data?.improvementPotential} />
+            </div>
+          </motion.div>
+        )}
+
+        {/* ── UPSELL SECTION ── */}
+        <UpsellSection currentPlan={isPaid ? plan : "free"} analysisId={data?.id} />
+
+        {/* ── Coach plan exclusive: 30-Day Plan ── */}
+        {isPaid && (plan === "coach" || plan === "monthly") && fullReport?.thirty_day_plan && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.1 }} className="glass rounded-2xl p-6 mb-8">
+            <h3 className="font-bold mb-4 flex items-center gap-2"><Calendar className="w-5 h-5 text-warning" /> Your 30-Day Plan</h3>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {Object.entries(fullReport.thirty_day_plan).map(([week, items], i) => (
+                <div key={i} className="bg-surface-light/50 rounded-xl p-4">
+                  <h4 className="text-xs font-bold text-accent-light mb-2 uppercase">{week.replace("_", " ")}</h4>
+                  <ul className="space-y-1.5">
+                    {(Array.isArray(items) ? items : [items]).map((item, j) => (
+                      <li key={j} className="flex items-start gap-2 text-xs text-muted">
+                        <div className="w-1.5 h-1.5 rounded-full bg-accent mt-1.5 shrink-0" />
+                        {item}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ))}
+            </div>
+            <Link href="/login?redirect=/progress" className="block mt-4 text-center text-sm text-accent hover:underline">
+              Sign up to track daily progress with reminders →
+            </Link>
+          </motion.div>
+        )}
+
+        {/* ── Monthly exclusive: Confidence + Photo Tips ── */}
+        {isPaid && plan === "monthly" && (
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.2 }} className="space-y-4 mb-8">
+            {fullReport?.confidence_tips && (
+              <div className="glass rounded-2xl p-6">
+                <h3 className="font-bold mb-3 flex items-center gap-2"><Heart className="w-5 h-5 text-pink-400" /> Confidence Tips</h3>
+                <ul className="space-y-2">
+                  {fullReport.confidence_tips.map((tip, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-muted">
+                      <Check className="w-4 h-4 text-success shrink-0 mt-0.5" />
+                      {tip}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+            {fullReport?.photo_tips && (
+              <div className="glass rounded-2xl p-6">
+                <h3 className="font-bold mb-3 flex items-center gap-2"><Camera className="w-5 h-5 text-blue-400" /> Photo Tips</h3>
+                <ul className="space-y-2">
+                  {fullReport.photo_tips.map((tip, i) => (
+                    <li key={i} className="flex items-start gap-2 text-sm text-muted">
+                      <Check className="w-4 h-4 text-success shrink-0 mt-0.5" />
+                      {tip}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </motion.div>
         )}
       </main>

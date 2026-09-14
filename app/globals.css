@@ -1,12 +1,17 @@
 @import "tailwindcss";
 
 /* ═══════════════════════════════════════════════════════
-   GlowUp AI — Cold Luxury Theme
-   Inspired by: Rolex, La Mer, Tom Ford, Dyson
-   Palette: Deep obsidian + silver/platinum + muted gold + icy blue
+   GlowUp AI — Themes
+   Night (default): Cold Luxury — deep obsidian + silver/platinum
+                    + muted gold + icy blue.
+   Day: Warm Luxury — soft ivory + platinum + muted gold + icy blue.
+   Theme is controlled via the `data-theme` attribute on <html>
+   ("night" | "day") and auto-detects the device preference.
    ═══════════════════════════════════════════════════════ */
 
-:root {
+/* ─── NIGHT (default / current theme) ────────────── */
+:root,
+[data-theme="night"] {
   --background: #09090b;
   --foreground: #fafafa;
   --accent: #c8a961;
@@ -22,6 +27,41 @@
   --ice: #7dd3fc;
   --ice-dark: #38bdf8;
   --silver: #d4d4d8;
+
+  /* Theme-derived tokens (used by glass / gradients / effects) */
+  --glass-bg: rgba(19, 19, 22, 0.8);
+  --glass-border-gold: rgba(200, 169, 97, 0.08);
+  --glass-border-ice: rgba(125, 211, 252, 0.1);
+  --grain-opacity: 0.015;
+  --grain-blend: normal;
+  --theme-color: #0a0a0f;
+}
+
+/* ─── DAY (light theme) ──────────────────────────── */
+[data-theme="day"] {
+  --background: #f7f5f0;
+  --foreground: #1a1814;
+  --accent: #a68b3e;
+  --accent-light: #c8a961;
+  --accent-dark: #8a7231;
+  --surface: #ffffff;
+  --surface-light: #efece4;
+  --muted: #8a8578;
+  --success: #059669;
+  --warning: #d97706;
+  --error: #dc2626;
+  --border: rgba(166, 139, 62, 0.18);
+  --ice: #0ea5e9;
+  --ice-dark: #0284c7;
+  --silver: #3f3d38;
+
+  /* Theme-derived tokens */
+  --glass-bg: rgba(255, 255, 255, 0.72);
+  --glass-border-gold: rgba(166, 139, 62, 0.16);
+  --glass-border-ice: rgba(14, 165, 233, 0.16);
+  --grain-opacity: 0.03;
+  --grain-blend: multiply;
+  --theme-color: #f7f5f0;
 }
 
 @theme inline {
@@ -48,15 +88,34 @@
   box-sizing: border-box;
 }
 
+html {
+  background: var(--background);
+}
+
 body {
   background: var(--background);
   color: var(--foreground);
   font-family: var(--font-geist-sans), system-ui, -apple-system, sans-serif;
 }
 
+/* Smooth transition when switching themes */
+html,
+body,
+.glass,
+.glass-ice,
+.gradient-bg {
+  transition: background-color 0.3s ease, color 0.3s ease,
+    border-color 0.3s ease;
+}
+
 /* ─── GRADIENT TEXT ──────────────────────────────── */
 .gradient-text {
-  background: linear-gradient(135deg, #c8a961 0%, #f5e6b8 45%, #7dd3fc 100%);
+  background: linear-gradient(
+    135deg,
+    var(--accent) 0%,
+    var(--accent-light) 45%,
+    var(--ice) 100%
+  );
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   background-clip: text;
@@ -80,15 +139,15 @@ body {
 
 /* ─── GLASS MORPHISM ─────────────────────────────── */
 .glass {
-  background: rgba(19, 19, 22, 0.8);
+  background: var(--glass-bg);
   backdrop-filter: blur(16px);
-  border: 1px solid rgba(200, 169, 97, 0.08);
+  border: 1px solid var(--glass-border-gold);
 }
 
 .glass-ice {
-  background: rgba(19, 19, 22, 0.8);
+  background: var(--glass-bg);
   backdrop-filter: blur(16px);
-  border: 1px solid rgba(125, 211, 252, 0.1);
+  border: 1px solid var(--glass-border-ice);
 }
 
 /* ─── GRADIENT BACKGROUNDS ───────────────────────── */
@@ -101,6 +160,20 @@ body {
     radial-gradient(
       ellipse 60% 40% at 80% 80%,
       rgba(125, 211, 252, 0.03) 0%,
+      transparent 50%
+    ),
+    var(--background);
+}
+
+[data-theme="day"] .gradient-bg {
+  background: radial-gradient(
+      ellipse 80% 60% at 50% -20%,
+      rgba(166, 139, 62, 0.1) 0%,
+      transparent 60%
+    ),
+    radial-gradient(
+      ellipse 60% 40% at 80% 80%,
+      rgba(14, 165, 233, 0.06) 0%,
       transparent 50%
     ),
     var(--background);
@@ -137,7 +210,8 @@ body {
   position: fixed;
   inset: 0;
   pointer-events: none;
-  opacity: 0.015;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: var(--grain-blend);
   background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.65' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E");
   z-index: 9999;
 }

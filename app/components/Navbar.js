@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Sparkles, User, LogOut } from "lucide-react";
 import Link from "next/link";
+import ThemeToggle from "./ThemeToggle";
 
 export default function Navbar() {
   const [user, setUser] = useState(null);
@@ -46,6 +47,7 @@ export default function Navbar() {
         </div>
 
         <div className="flex items-center gap-3">
+          <ThemeToggle />
           {user ? (
             <div className="relative">
               <button

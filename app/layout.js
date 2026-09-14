@@ -8,6 +8,8 @@ import {
   getHowToSchema,
 } from "./lib/seo";
 import StructuredData from "./components/StructuredData";
+import ThemeScript from "./components/ThemeScript";
+import { ThemeProvider } from "./components/ThemeProvider";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -57,6 +59,7 @@ export default function RootLayout({ children }) {
       className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
     >
       <head>
+        <ThemeScript />
         <StructuredData
           schemas={[
             getOrganizationSchema(),
@@ -70,7 +73,7 @@ export default function RootLayout({ children }) {
         <meta name="theme-color" content="#0a0a0f" />
       </head>
       <body className="min-h-full flex flex-col bg-background text-foreground font-sans">
-        {children}
+        <ThemeProvider>{children}</ThemeProvider>
       </body>
     </html>
   );

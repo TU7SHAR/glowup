@@ -1,18 +1,20 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/app/lib/supabase/server";
+import { createClient, createAdminClient } from "@/app/lib/supabase/server";
 import { validateOrigin, rateLimit } from "@/app/lib/security";
-import Razorpay from "razorpay";
-import { v4 as uuidv4 } from "uuid";
-
-const PLAN_PRICES = {
-  report: 19900,   // ₹199 in paise
-  coach: 49900,    // ₹499 in paise
-  monthly: 99900,  // ₹999 in paise
-};
+import { getPlan, PLAN_KEYS } from "@/app/lib/plans";
+import {
+  getRazorpayClient,
+  getRazorpayPlanId,
+  upsertSubscriptionFromRazorpay,
+} from "@/app/lib/subscriptions";
 
 /**
  * POST /api/payment/create
- * Create a Razorpay order for the selected plan
+ * Create a Razorpay *Subscription* (recurring) for the selected plan.
+ *
+ * Subscriptions attach to a user account, so this route requires an
+ * authenticated Supabase user (spec §17/§44). The returned subscription id is
+ * handed to Razorpay Checkout on the client.
  */
 export async function POST(request) {
   try {
@@ -32,74 +34,80 @@ export async function POST(request) {
     }
 
     const body = await request.json();
-    const { plan, analysisId, sessionId, email, name } = body;
+    const { plan: planKey, analysisId } = body;
 
-    // Validate plan
-    if (!PLAN_PRICES[plan]) {
+    // ─── Validate plan ────────────────────────────────
+    const plan = getPlan(planKey);
+    if (!plan) {
       return NextResponse.json({ error: "Invalid plan" }, { status: 400 });
     }
-    if (!analysisId || !sessionId) {
+
+    const razorpayPlanId = getRazorpayPlanId(planKey);
+    if (!razorpayPlanId) {
+      console.error(`[Payment] Missing Razorpay plan id for ${planKey}`);
       return NextResponse.json(
-        { error: "Missing analysisId or sessionId" },
-        { status: 400 }
+        { error: "This plan is not available yet. Please try again later." },
+        { status: 503 }
       );
     }
 
+    // ─── Require an authenticated user ────────────────
+    const authClient = await createClient();
+    const {
+      data: { user },
+    } = await authClient.auth.getUser();
 
-    // Initialize Razorpay
-    const razorpay = new Razorpay({
-      key_id: process.env.RAZORPAY_KEY_ID,
-      key_secret: process.env.RAZORPAY_KEY_SECRET,
-    });
+    if (!user) {
+      return NextResponse.json(
+        { error: "Please sign in to start your subscription.", code: "auth_required" },
+        { status: 401 }
+      );
+    }
 
-    // Create Razorpay order
-    const amount = PLAN_PRICES[plan];
-    const receipt = `glowup_${uuidv4().slice(0, 8)}`;
+    // ─── Create the Razorpay subscription ─────────────
+    const razorpay = getRazorpayClient();
 
-    const order = await razorpay.orders.create({
-      amount,
-      currency: "INR",
-      receipt,
+    // total_count: how many billing cycles Razorpay should attempt before
+    // marking the subscription complete. We use a large horizon so it keeps
+    // renewing until the customer cancels.
+    const totalCount = planKey === PLAN_KEYS.PRO_ANNUAL ? 10 : 120;
+
+    const subscription = await razorpay.subscriptions.create({
+      plan_id: razorpayPlanId,
+      total_count: totalCount,
+      customer_notify: 1,
       notes: {
-        plan,
-        analysisId,
-        sessionId,
-        email: email || "",
-        name: name || "",
+        glowup_plan_key: planKey,
+        user_id: user.id,
+        analysis_id: analysisId || "",
       },
     });
 
-    // Store payment record in DB
-    const supabase = createAdminClient();
-    const { error: dbError } = await supabase.from("payments").insert({
-      session_id: sessionId,
-      analysis_id: analysisId,
-      razorpay_order_id: order.id,
-      amount,
-      currency: "INR",
-      plan,
-      status: "created",
-      receipt,
-      notes: { email, name },
+    // ─── Mirror it locally (source of truth for access) ─
+    const admin = createAdminClient();
+    const { error: dbError } = await upsertSubscriptionFromRazorpay(admin, {
+      userId: user.id,
+      planKey,
+      razorpaySubscription: subscription,
     });
-
     if (dbError) {
-      console.error("[Payment] DB insert error:", dbError);
+      console.error("[Payment] Subscription upsert error:", dbError);
     }
 
     return NextResponse.json({
       success: true,
-      orderId: order.id,
-      amount,
-      currency: "INR",
+      subscriptionId: subscription.id,
       key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
       name: "GlowUp AI",
-      description: `GlowUp AI - ${plan === "report" ? "Glow-Up Report" : plan === "coach" ? "30-Day Coach" : "Monthly Premium"}`,
+      description: `GlowUp AI — ${plan.name} (${plan.intervalLabel})`,
+      plan: planKey,
+      amount: plan.amount,
+      currency: plan.currency,
     });
   } catch (error) {
     console.error("[API] /payment/create error:", error);
     return NextResponse.json(
-      { error: "Failed to create payment order" },
+      { error: "Failed to start subscription" },
       { status: 500 }
     );
   }

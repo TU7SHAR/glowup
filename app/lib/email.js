@@ -212,7 +212,16 @@ function buildReportEmailHTML(name, analysisId, appUrl) {
 }
 
 function buildPaymentEmailHTML(name, plan, amount) {
-  const planNames = { report: "Glow-Up Report", coach: "30-Day Coach", monthly: "Monthly Premium" };
+  const planNames = {
+    // legacy one-time keys
+    report: "Glow-Up Report",
+    coach: "30-Day Coach",
+    monthly: "Monthly Premium",
+    // subscription plans
+    trial_7d: "7-Day Glow-Up",
+    pro_monthly: "GlowUp Pro (Monthly)",
+    pro_annual: "GlowUp Annual",
+  };
   return `
 <!DOCTYPE html>
 <html>

@@ -55,28 +55,39 @@ function PremiumContent() {
     setError("");
 
     try {
-      const sessionId = localStorage.getItem("glowup_session_id");
-      const id = analysisId || localStorage.getItem("glowup_analysis_id");
+      const id = analysisId || localStorage.getItem("glowup_analysis_id") || "";
 
-      if (!id || !sessionId) {
-        throw new Error("No analysis found. Please upload a selfie first.");
+      // Subscriptions attach to a user account, so require login first.
+      const existingUser = localStorage.getItem("glowup_user");
+      if (!existingUser) {
+        const redirectUrl = `/premium${id ? `?id=${id}` : ""}`;
+        router.push(
+          `/login?redirect=${encodeURIComponent(redirectUrl)}&reason=subscribe`
+        );
+        return;
       }
 
-      // Create Razorpay order
+      // Create the Razorpay subscription
       const res = await fetch("/api/payment/create", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           plan: selectedPlan,
           analysisId: id,
-          sessionId,
-          email,
-          name,
         }),
       });
 
       const order = await res.json();
-      if (!res.ok) throw new Error(order.error);
+      if (!res.ok) {
+        if (order.code === "auth_required") {
+          const redirectUrl = `/premium${id ? `?id=${id}` : ""}`;
+          router.push(
+            `/login?redirect=${encodeURIComponent(redirectUrl)}&reason=subscribe`
+          );
+          return;
+        }
+        throw new Error(order.error);
+      }
 
       // Open Razorpay checkout
       if (typeof window.Razorpay === "undefined") {
@@ -96,45 +107,35 @@ function PremiumContent() {
 
       const options = {
         key: order.key,
-        amount: order.amount,
-        currency: order.currency,
+        subscription_id: order.subscriptionId,
         name: order.name,
         description: order.description,
-        order_id: order.orderId,
         prefill: { email, name },
         theme: { color: "#a855f7" },
         handler: async function (response) {
-          // Verify payment
+          // Verify the subscription authorization
           try {
             const verifyRes = await fetch("/api/payment/verify", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({
-                razorpay_order_id: response.razorpay_order_id,
                 razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_subscription_id: response.razorpay_subscription_id,
                 razorpay_signature: response.razorpay_signature,
-                sessionId,
               }),
             });
 
             const verifyData = await verifyRes.json();
             if (verifyData.success) {
-              // Check if user is logged in
-              const existingUser = localStorage.getItem("glowup_user");
-              if (existingUser) {
-                // Already logged in — go straight to results
-                router.push(`/results?id=${id}&unlocked=true`);
-              } else {
-                // ENFORCE LOGIN after payment — to save report to their account
-                const redirectUrl = `/results?id=${id}&unlocked=true`;
-                router.push(`/login?redirect=${encodeURIComponent(redirectUrl)}&reason=payment`);
-              }
+              router.push(`/results?id=${id}`);
             } else {
-              setError("Payment verification failed. Contact support.");
+              setError("Subscription verification failed. Contact support.");
               setIsLoading(false);
             }
           } catch (e) {
-            setError("Verification error. Your payment is safe - contact support.");
+            setError(
+              "Verification error. Your payment is safe - contact support."
+            );
             setIsLoading(false);
           }
         },

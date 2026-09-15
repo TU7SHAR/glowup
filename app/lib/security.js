@@ -163,8 +163,6 @@ export function generateCSRFToken() {
 export function validateOrigin(request) {
   const origin = request.headers.get("origin");
   const referer = request.headers.get("referer");
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  const allowedOrigins = [appUrl, "http://localhost:3000"];
 
   if (!origin && !referer) {
     // Allow requests without origin (e.g., same-site navigation)
@@ -172,6 +170,26 @@ export function validateOrigin(request) {
   }
 
   const requestOrigin = origin || new URL(referer).origin;
+
+  // A same-origin request (its origin matches the host it was sent to) is
+  // always legitimate. Deriving the host from the request itself means this
+  // works on Vercel deployments, preview URLs and custom domains without
+  // hardcoding every host, while still rejecting cross-site requests.
+  const host = request.headers.get("host");
+  if (host) {
+    try {
+      if (new URL(requestOrigin).host === host) {
+        return true;
+      }
+    } catch {
+      // Fall through to the explicit allow-list below.
+    }
+  }
+
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+  const allowedOrigins = ["http://localhost:3000"];
+  if (appUrl) allowedOrigins.push(appUrl);
+
   return allowedOrigins.some((allowed) => requestOrigin.startsWith(allowed));
 }
 

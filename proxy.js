@@ -25,27 +25,39 @@ export function proxy(request) {
   ];
 
   if (suspiciousPatterns.some((pattern) => pattern.test(request.url + userAgent))) {
-    return new NextResponse("Forbidden", { status: 403 });
+    return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
   // ─── SECURITY: Block path traversal attempts ─────────
   if (pathname.includes("..") || pathname.includes("//")) {
-    return new NextResponse("Bad Request", { status: 400 });
+    return NextResponse.json({ error: "Bad Request" }, { status: 400 });
   }
 
   // ─── SECURITY: Protect API routes ───────────────────
   if (pathname.startsWith("/api/")) {
-    // Validate origin for API calls (CSRF protection)
+    // Validate origin for API calls (CSRF protection).
+    // A same-origin request (origin host === the request's own host) is always
+    // legitimate — this is what CSRF origin-checking is meant to allow — so we
+    // derive the allow-list from the actual request host. This makes it work on
+    // Vercel deployments, preview URLs and custom domains without hardcoding
+    // each one, while still blocking cross-site POSTs.
     const origin = request.headers.get("origin");
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const allowedOrigins = [appUrl, "http://localhost:3000"];
+    const appUrl = process.env.NEXT_PUBLIC_APP_URL;
+    const requestOrigin = request.nextUrl.origin; // scheme + host of this request
+
+    const allowedOrigins = [requestOrigin, "http://localhost:3000"];
+    if (appUrl) allowedOrigins.push(appUrl);
 
     if (
       request.method !== "GET" &&
       origin &&
       !allowedOrigins.some((o) => origin.startsWith(o))
     ) {
-      return new NextResponse("Forbidden - Invalid Origin", { status: 403 });
+      // Respond with JSON so client-side `res.json()` parsing never throws.
+      return NextResponse.json(
+        { error: "Forbidden - Invalid Origin" },
+        { status: 403 }
+      );
     }
 
     // Add rate limit headers (actual enforcement happens in API routes)

@@ -1,11 +1,22 @@
 import { NextResponse } from "next/server";
-import { createAdminClient } from "@/app/lib/supabase/server";
+import { createClient, createAdminClient } from "@/app/lib/supabase/server";
 import { validateOrigin } from "@/app/lib/security";
+import { getPlan } from "@/app/lib/plans";
+import { recordSubscriptionPayment } from "@/app/lib/subscriptions";
 import crypto from "crypto";
 
 /**
  * POST /api/payment/verify
- * Verify Razorpay payment signature and unlock report
+ * Verify a Razorpay *subscription* authorization signature.
+ *
+ * For subscriptions, Razorpay Checkout returns razorpay_payment_id,
+ * razorpay_subscription_id and razorpay_signature. The signature is
+ * HMAC-SHA256 of `${razorpay_payment_id}|${razorpay_subscription_id}`
+ * (note the order differs from one-time orders).
+ *
+ * This confirms the user completed authorization. The subscription's ongoing
+ * status is ultimately driven by webhooks (spec §18); this route provides
+ * immediate UX confirmation and records the initial payment.
  */
 export async function POST(request) {
   try {
@@ -15,15 +26,18 @@ export async function POST(request) {
 
     const body = await request.json();
     const {
-      razorpay_order_id,
       razorpay_payment_id,
+      razorpay_subscription_id,
       razorpay_signature,
-      sessionId,
     } = body;
 
-    if (!razorpay_order_id || !razorpay_payment_id || !razorpay_signature) {
+    if (
+      !razorpay_payment_id ||
+      !razorpay_subscription_id ||
+      !razorpay_signature
+    ) {
       return NextResponse.json(
-        { error: "Missing payment verification fields" },
+        { error: "Missing subscription verification fields" },
         { status: 400 }
       );
     }
@@ -32,66 +46,91 @@ export async function POST(request) {
     const secret = process.env.RAZORPAY_KEY_SECRET;
     const generatedSignature = crypto
       .createHmac("sha256", secret)
-      .update(`${razorpay_order_id}|${razorpay_payment_id}`)
+      .update(`${razorpay_payment_id}|${razorpay_subscription_id}`)
       .digest("hex");
 
-    if (generatedSignature !== razorpay_signature) {
+    // Timing-safe comparison.
+    const valid =
+      generatedSignature.length === razorpay_signature.length &&
+      crypto.timingSafeEqual(
+        Buffer.from(generatedSignature),
+        Buffer.from(razorpay_signature)
+      );
+
+    if (!valid) {
       return NextResponse.json(
-        { error: "Payment verification failed - invalid signature" },
+        { error: "Subscription verification failed - invalid signature" },
         { status: 400 }
       );
     }
 
+    const admin = createAdminClient();
 
-    // ─── UPDATE PAYMENT RECORD ────────────────────────
-    const supabase = createAdminClient();
+    // ─── Look up the local subscription row ───────────
+    const { data: subscription } = await admin
+      .from("subscriptions")
+      .select("*")
+      .eq("provider_subscription_id", razorpay_subscription_id)
+      .maybeSingle();
 
-    const { data: payment, error: fetchError } = await supabase
-      .from("payments")
-      .update({
-        razorpay_payment_id,
-        razorpay_signature,
-        status: "captured",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("razorpay_order_id", razorpay_order_id)
-      .select("*, analysis_id")
-      .single();
-
-    if (fetchError || !payment) {
-      console.error("[Payment] Update failed:", fetchError);
-      return NextResponse.json(
-        { error: "Payment record not found" },
-        { status: 404 }
-      );
+    // Confirm ownership: the signed-in user should own this subscription.
+    const authClient = await createClient();
+    const {
+      data: { user },
+    } = await authClient.auth.getUser();
+    if (user && subscription && subscription.user_id !== user.id) {
+      return NextResponse.json({ error: "Forbidden" }, { status: 403 });
     }
 
-    // ─── SEND CONFIRMATION EMAIL (async, don't block) ─
-    try {
-      const { sendReportEmail } = await import("@/app/lib/email");
-      const email = payment.notes?.email;
-      if (email) {
-        sendReportEmail({
-          to: email,
-          name: payment.notes?.name || "",
-          analysisId: payment.analysis_id,
-        }).catch((e) => console.error("[Email] Send failed:", e));
+    // ─── Mark authorized & record the initial payment ─
+    if (subscription) {
+      await admin
+        .from("subscriptions")
+        .update({
+          // A successful authorization means the mandate is set up. Keep
+          // 'trialing' until the first charge webhook flips it to 'active';
+          // for immediate-charge plans the webhook will arrive shortly.
+          status: subscription.status === "canceled" ? subscription.status : "trialing",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", subscription.id);
+
+      const plan = getPlan(subscription.plan);
+      await recordSubscriptionPayment(admin, {
+        userId: subscription.user_id,
+        subscriptionId: subscription.id,
+        planKey: subscription.plan,
+        razorpayPaymentId: razorpay_payment_id,
+        razorpaySubscriptionId: razorpay_subscription_id,
+        amount: plan?.amount,
+        status: "paid",
+        billingReason: "initial",
+      });
+
+      // ─── Confirmation email (best effort) ───────────
+      try {
+        const { sendPaymentConfirmation } = await import("@/app/lib/email");
+        const email = subscription.notes?.email || user?.email;
+        if (email && plan) {
+          sendPaymentConfirmation({
+            to: email,
+            plan: subscription.plan,
+            amount: plan.amount,
+          }).catch((e) => console.error("[Email] Send failed:", e));
+        }
+      } catch (e) {
+        console.error("[Email] Import/send error:", e);
       }
-    } catch (e) {
-      console.error("[Email] Import/send error:", e);
     }
 
     return NextResponse.json({
       success: true,
-      message: "Payment verified successfully",
-      analysisId: payment.analysis_id,
-      plan: payment.plan,
+      message: "Subscription authorized successfully",
+      subscriptionId: razorpay_subscription_id,
+      plan: subscription?.plan || null,
     });
   } catch (error) {
     console.error("[API] /payment/verify error:", error);
-    return NextResponse.json(
-      { error: "Verification failed" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Verification failed" }, { status: 500 });
   }
 }

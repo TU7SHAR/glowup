@@ -39,6 +39,8 @@ export const PLANS = {
     name: "7-Day Glow-Up",
     tagline: "Start your transformation",
     amount: 19900, // ₹199
+    anchorAmount: 49900, // ₹499 crossed out (feels like a steal)
+    savingsLabel: "60% OFF",
     currency: "INR",
     interval: "weekly",
     intervalCount: 1, // every 7 days
@@ -62,6 +64,8 @@ export const PLANS = {
     name: "GlowUp Pro",
     tagline: "Your ongoing AI transformation coach",
     amount: 49900, // ₹499
+    anchorAmount: 149900, // ₹1,499 crossed out
+    savingsLabel: "67% OFF",
     currency: "INR",
     interval: "monthly",
     intervalCount: 1,
@@ -87,6 +91,11 @@ export const PLANS = {
     name: "GlowUp Annual",
     tagline: "Best value for long-term transformation",
     amount: 549900, // ₹5,499
+    anchorAmount: 999900, // ₹9,999 crossed out
+    savingsLabel: "45% OFF",
+    // Effective monthly rate + honest comparison vs paying monthly.
+    effectiveMonthly: 45825, // ₹5,499 / 12 ≈ ₹458/mo
+    vsMonthlyNote: "₹458/mo · save ₹489 vs monthly",
     currency: "INR",
     interval: "yearly",
     intervalCount: 1,

@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
+import { createClient } from "@/app/lib/supabase/client";
 
 export default function LoginPage() {
   return (
@@ -38,43 +39,63 @@ function LoginContent() {
     setSuccess("");
 
     try {
-      const endpoint = mode === "login" ? "/api/auth/login" : "/api/auth/signup";
       const sessionId = localStorage.getItem("glowup_session_id");
+      const cleanEmail = email.trim().toLowerCase();
 
-      const res = await fetch(endpoint, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          email,
-          password,
-          name: mode === "signup" ? name : undefined,
-          sessionId,
-        }),
-      });
-
-      const data = await res.json();
-
-      if (!res.ok) {
-        throw new Error(data.error || "Something went wrong");
+      // For signup, create the account server-side first (admin auto-confirms
+      // the email so there's no verification friction). Then we sign in on the
+      // client below to establish a real session.
+      if (mode === "signup") {
+        const signupRes = await fetch("/api/auth/signup", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ email: cleanEmail, password, name, sessionId }),
+        });
+        const signupData = await signupRes.json().catch(() => ({}));
+        if (!signupRes.ok) {
+          throw new Error(signupData.error || "Sign up failed");
+        }
       }
 
-      // Store user in localStorage for navbar + session persistence
-      const userData = {
-        id: data.user?.id || data.userId,
-        email: email,
-        name: mode === "signup" ? name : (data.user?.name || email.split("@")[0]),
+      // Authenticate on the CLIENT so @supabase/ssr persists a real session
+      // cookie. The server routes (e.g. payment/create) read this cookie via
+      // getUser(); previously auth only set localStorage, so the server never
+      // saw a session and kept re-prompting for login after payment.
+      const supabase = createClient();
+      const { data: authData, error: authError } =
+        await supabase.auth.signInWithPassword({
+          email: cleanEmail,
+          password,
+        });
+
+      if (authError) {
+        throw new Error(
+          authError.message ||
+            (mode === "login" ? "Invalid credentials" : "Could not sign in")
+        );
+      }
+
+      // Link any anonymous analyses/payments to this user (server-side).
+      const linkRes = await fetch("/api/auth/link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ sessionId }),
+      });
+      const linkData = await linkRes.json().catch(() => ({}));
+
+      // Sync navbar state from the real session.
+      const u = authData.user;
+      const userData = linkData.user || {
+        id: u?.id,
+        email: u?.email,
+        name: u?.user_metadata?.full_name || u?.email?.split("@")[0] || name,
+        avatar: u?.user_metadata?.avatar_url || "",
       };
       localStorage.setItem("glowup_user", JSON.stringify(userData));
 
-      if (mode === "signup") {
-        setSuccess("Account created! You can now track your 30-day progress.");
-        setTimeout(() => router.push(redirect), 1500);
-      } else {
-        router.push(redirect);
-      }
+      router.push(redirect);
     } catch (err) {
       setError(err.message);
-    } finally {
       setIsLoading(false);
     }
   };

@@ -154,6 +154,48 @@ export async function sendPaymentConfirmation({ to, name, plan, amount }) {
 }
 
 /**
+ * Send a subscription welcome / confirmation email to a new subscriber.
+ * Communicates the recurring nature and next steps (spec §48).
+ */
+export async function sendSubscriptionWelcome({ to, name, plan, amount, intervalLabel }) {
+  return sendEmail({
+    to,
+    subject: "Welcome to GlowUp — your transformation starts now ✨",
+    html: buildSubscriptionWelcomeHTML(name, plan, amount, intervalLabel),
+  });
+}
+
+/**
+ * Notify the GlowUp team of a new sale. Sends to ADMIN_EMAIL (or SALES_EMAIL);
+ * no-ops gracefully if neither is set so it never blocks the payment flow.
+ */
+export async function sendSalesNotification({ plan, amount, intervalLabel, customerEmail, subscriptionId }) {
+  const adminEmail = process.env.ADMIN_EMAIL || process.env.SALES_EMAIL;
+  if (!adminEmail) {
+    console.warn("[Email] No ADMIN_EMAIL/SALES_EMAIL set — skipping sales notification");
+    return { success: false, skipped: true };
+  }
+  const rupees = (amount / 100).toLocaleString("en-IN");
+  return sendEmail({
+    to: adminEmail,
+    subject: `💰 New GlowUp subscription — ₹${rupees} (${plan})`,
+    html: `
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"></head>
+<body style="font-family: -apple-system, sans-serif; padding: 24px; color: #111;">
+  <h2 style="margin:0 0 12px;">💰 New subscription</h2>
+  <table style="border-collapse: collapse; font-size: 14px;">
+    <tr><td style="padding:4px 12px 4px 0; color:#666;">Plan</td><td><strong>${plan}</strong></td></tr>
+    <tr><td style="padding:4px 12px 4px 0; color:#666;">Amount</td><td><strong>₹${rupees}</strong> ${intervalLabel || ""}</td></tr>
+    <tr><td style="padding:4px 12px 4px 0; color:#666;">Customer</td><td>${customerEmail || "—"}</td></tr>
+    <tr><td style="padding:4px 12px 4px 0; color:#666;">Subscription</td><td>${subscriptionId || "—"}</td></tr>
+    <tr><td style="padding:4px 12px 4px 0; color:#666;">Time</td><td>${new Date().toISOString()}</td></tr>
+  </table>
+</body></html>`,
+  });
+}
+
+/**
  * Send daily reminder for 30-day challenge
  */
 export async function sendDailyReminder({ to, name, dayNumber, tasks }) {
@@ -211,8 +253,55 @@ function buildReportEmailHTML(name, analysisId, appUrl) {
 </html>`;
 }
 
+const PLAN_DISPLAY_NAMES = {
+  // legacy one-time keys
+  report: "Glow-Up Report",
+  coach: "30-Day Coach",
+  monthly: "Monthly Premium",
+  // subscription plans
+  trial_7d: "7-Day Glow-Up",
+  pro_monthly: "GlowUp Pro (Monthly)",
+  pro_annual: "GlowUp Annual",
+};
+
+function buildSubscriptionWelcomeHTML(name, plan, amount, intervalLabel) {
+  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
+  const planName = PLAN_DISPLAY_NAMES[plan] || plan;
+  return `
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"></head>
+<body style="font-family: -apple-system, sans-serif; background: #0a0a0f; color: #f5f5f7; padding: 40px 20px;">
+  <div style="max-width: 520px; margin: 0 auto;">
+    <h1 style="background: linear-gradient(135deg, #c8a961, #7dd3fc); -webkit-background-clip: text; -webkit-text-fill-color: transparent; font-size: 28px;">
+      GlowUp AI
+    </h1>
+    <h2 style="color: #f5f5f7; margin-top: 20px;">Welcome, ${name || "there"} — your transformation starts now ✨</h2>
+    <p style="color: #a1a1aa; line-height: 1.6;">
+      You're subscribed to <strong style="color:#f5f5f7;">${planName}</strong>
+      (₹${amount / 100}${intervalLabel ? ", renewing " + intervalLabel : ""}).
+      GlowUp isn't a one-off report — it's your ongoing coach. Here's what to do next:
+    </p>
+    <ol style="color: #a1a1aa; line-height: 1.8; padding-left: 20px;">
+      <li>Open your dashboard and start Day 1 of your glow-up.</li>
+      <li>Complete your daily missions and check in.</li>
+      <li>Watch your before → after transformation build over time.</li>
+    </ol>
+    <a href="${appUrl}/results"
+       style="display: inline-block; background: #c8a961; color: #0a0a0f; padding: 14px 32px; border-radius: 50px; text-decoration: none; font-weight: 600; margin: 20px 0;">
+      Start My Transformation →
+    </a>
+    <p style="color: #71717a; font-size: 12px; margin-top: 28px;">
+      Recurring subscription — you can cancel anytime and keep access until the end of your billing period.
+      Questions? Just reply to this email.
+    </p>
+  </div>
+</body>
+</html>`;
+}
+
 function buildPaymentEmailHTML(name, plan, amount) {
-  const planNames = { report: "Glow-Up Report", coach: "30-Day Coach", monthly: "Monthly Premium" };
+  const planNames = PLAN_DISPLAY_NAMES;
   return `
 <!DOCTYPE html>
 <html>

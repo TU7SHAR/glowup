@@ -107,16 +107,44 @@ export async function POST(request) {
         billingReason: "initial",
       });
 
-      // ─── Confirmation email (best effort) ───────────
+      // Resolve the customer's email: prefer their auth account, then any
+      // stored subscription note, then the profile row.
+      let customerEmail = user?.email || subscription.notes?.email || null;
+      let customerName = user?.user_metadata?.full_name || "";
+      if (!customerEmail && subscription.user_id) {
+        const { data: profile } = await admin
+          .from("profiles")
+          .select("email, full_name")
+          .eq("id", subscription.user_id)
+          .maybeSingle();
+        customerEmail = profile?.email || null;
+        customerName = customerName || profile?.full_name || "";
+      }
+
+      // ─── Emails (best effort — never block the response) ───
       try {
-        const { sendPaymentConfirmation } = await import("@/app/lib/email");
-        const email = subscription.notes?.email || user?.email;
-        if (email && plan) {
-          sendPaymentConfirmation({
-            to: email,
+        const { sendSubscriptionWelcome, sendSalesNotification } = await import(
+          "@/app/lib/email"
+        );
+        // 1) Welcome / confirmation to the customer
+        if (customerEmail && plan) {
+          sendSubscriptionWelcome({
+            to: customerEmail,
+            name: customerName,
             plan: subscription.plan,
             amount: plan.amount,
-          }).catch((e) => console.error("[Email] Send failed:", e));
+            intervalLabel: plan.intervalLabel,
+          }).catch((e) => console.error("[Email] Welcome send failed:", e));
+        }
+        // 2) Sales notification to the team
+        if (plan) {
+          sendSalesNotification({
+            plan: subscription.plan,
+            amount: plan.amount,
+            intervalLabel: plan.intervalLabel,
+            customerEmail,
+            subscriptionId: razorpay_subscription_id,
+          }).catch((e) => console.error("[Email] Sales notify failed:", e));
         }
       } catch (e) {
         console.error("[Email] Import/send error:", e);

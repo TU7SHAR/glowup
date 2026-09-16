@@ -1,16 +1,42 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Sparkles, User, LogOut } from "lucide-react";
+import { Sparkles, User, LogOut, Loader2, Mail, BadgeCheck } from "lucide-react";
 import Link from "next/link";
 import ThemeToggle from "./ThemeToggle";
+
+// ─── OAuth safety net ───────────────────────────────
+// Google/Supabase can redirect back with `?code=...` on the wrong path
+// (e.g. the homepage) instead of our /api/auth/callback route. If we detect a
+// stray code, forward it to the callback so login always completes — then the
+// URL is cleaned up by the callback redirect. Runs synchronously (module scope
+// via a helper) so we never flash the signed-out navbar.
+function catchStrayOAuthCode() {
+  if (typeof window === "undefined") return false;
+  const params = new URLSearchParams(window.location.search);
+  const code = params.get("code");
+  const onCallback = window.location.pathname.startsWith("/api/auth");
+  if (code && !onCallback) {
+    const redirect =
+      params.get("redirect") || window.location.pathname || "/results";
+    window.location.replace(
+      `/api/auth/callback?code=${encodeURIComponent(code)}&redirect=${encodeURIComponent(redirect)}`
+    );
+    return true;
+  }
+  return false;
+}
 
 export default function Navbar() {
   const [user, setUser] = useState(null);
   const [showMenu, setShowMenu] = useState(false);
   const [scrolled, setScrolled] = useState(false);
+  // Lazy initializer runs during render (not in an effect), so no setState-in-effect.
+  const [finishingLogin] = useState(() => catchStrayOAuthCode());
 
   useEffect(() => {
+    if (finishingLogin) return; // we're navigating away to the callback
+
     const storedUser = localStorage.getItem("glowup_user");
     if (storedUser) {
       try { setUser(JSON.parse(storedUser)); } catch {}
@@ -19,13 +45,26 @@ export default function Navbar() {
     const handleScroll = () => setScrolled(window.scrollY > 20);
     window.addEventListener("scroll", handleScroll);
     return () => window.removeEventListener("scroll", handleScroll);
-  }, []);
+  }, [finishingLogin]);
+
+  // Close the menu when clicking outside of it.
+  useEffect(() => {
+    if (!showMenu) return;
+    const close = (e) => {
+      if (!e.target.closest?.("[data-profile-menu]")) setShowMenu(false);
+    };
+    window.addEventListener("click", close);
+    return () => window.removeEventListener("click", close);
+  }, [showMenu]);
 
   const handleLogout = () => {
     localStorage.removeItem("glowup_user");
     setUser(null);
     setShowMenu(false);
   };
+
+  const displayName = user?.name || user?.email?.split("@")[0] || "Account";
+  const initial = displayName?.charAt(0)?.toUpperCase() || "U";
 
   return (
     <nav className={`fixed top-0 left-0 right-0 z-50 transition-all duration-300 ${
@@ -47,26 +86,82 @@ export default function Navbar() {
         </div>
 
         <div className="flex items-center gap-3">
-          <ThemeToggle />
-          {user ? (
-            <div className="relative">
+          {finishingLogin ? (
+            <span className="flex items-center gap-2 text-sm text-muted">
+              <Loader2 className="w-4 h-4 animate-spin text-accent" /> Signing in…
+            </span>
+          ) : user ? (
+            <div className="relative" data-profile-menu>
               <button
                 onClick={() => setShowMenu(!showMenu)}
-                className="flex items-center gap-2 px-3 py-2 rounded-full border border-border hover:border-accent/30 transition-all"
+                className="flex items-center gap-2 px-2 sm:px-3 py-1.5 rounded-full border border-border hover:border-accent/30 transition-all"
               >
-                <div className="w-7 h-7 rounded-full bg-accent/10 flex items-center justify-center">
-                  <User className="w-3.5 h-3.5 text-accent" />
-                </div>
-                <span className="text-sm text-silver hidden sm:block">
-                  {user.name || user.email?.split("@")[0]}
+                {user.avatar ? (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img
+                    src={user.avatar}
+                    alt={displayName}
+                    className="w-7 h-7 rounded-full object-cover"
+                  />
+                ) : (
+                  <div className="w-7 h-7 rounded-full bg-accent/15 flex items-center justify-center text-accent text-xs font-semibold">
+                    {initial}
+                  </div>
+                )}
+                <span className="text-sm text-silver hidden sm:block max-w-[120px] truncate">
+                  {displayName}
                 </span>
               </button>
+
               {showMenu && (
-                <div className="absolute right-0 top-full mt-2 glass rounded-xl p-2 min-w-[160px] shadow-xl">
-                  <Link href="/results" onClick={() => setShowMenu(false)} className="flex items-center gap-2 px-3 py-2.5 rounded-lg hover:bg-surface-light transition-colors text-sm">
+                <div className="absolute right-0 top-full mt-2 glass rounded-xl p-2 min-w-[240px] shadow-xl">
+                  {/* Account details */}
+                  <div className="px-3 py-3 border-b border-border/60 mb-1">
+                    <div className="flex items-center gap-3">
+                      {user.avatar ? (
+                        // eslint-disable-next-line @next/next/no-img-element
+                        <img
+                          src={user.avatar}
+                          alt={displayName}
+                          className="w-10 h-10 rounded-full object-cover"
+                        />
+                      ) : (
+                        <div className="w-10 h-10 rounded-full bg-accent/15 flex items-center justify-center text-accent text-sm font-semibold">
+                          {initial}
+                        </div>
+                      )}
+                      <div className="min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate flex items-center gap-1">
+                          {displayName}
+                          <BadgeCheck className="w-3.5 h-3.5 text-accent shrink-0" />
+                        </p>
+                        {user.email && (
+                          <p className="text-xs text-muted truncate flex items-center gap-1">
+                            <Mail className="w-3 h-3 shrink-0" /> {user.email}
+                          </p>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+
+                  <Link
+                    href="/results"
+                    onClick={() => setShowMenu(false)}
+                    className="flex items-center gap-2 px-3 py-2.5 rounded-lg hover:bg-surface-light transition-colors text-sm"
+                  >
                     <Sparkles className="w-3.5 h-3.5 text-accent" /> My Results
                   </Link>
-                  <button onClick={handleLogout} className="flex items-center gap-2 w-full px-3 py-2.5 rounded-lg hover:bg-surface-light transition-colors text-sm text-error">
+                  <Link
+                    href="/premium"
+                    onClick={() => setShowMenu(false)}
+                    className="flex items-center gap-2 px-3 py-2.5 rounded-lg hover:bg-surface-light transition-colors text-sm"
+                  >
+                    <User className="w-3.5 h-3.5 text-accent" /> Manage Plan
+                  </Link>
+                  <button
+                    onClick={handleLogout}
+                    className="flex items-center gap-2 w-full px-3 py-2.5 rounded-lg hover:bg-surface-light transition-colors text-sm text-error"
+                  >
                     <LogOut className="w-3.5 h-3.5" /> Sign Out
                   </button>
                 </div>

@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { Sparkles, User, LogOut, Loader2, Mail, BadgeCheck } from "lucide-react";
 import Link from "next/link";
+import ThemeToggle from "./ThemeToggle";
 
 // ─── OAuth safety net ───────────────────────────────
 // Google/Supabase can redirect back with `?code=...` on the wrong path

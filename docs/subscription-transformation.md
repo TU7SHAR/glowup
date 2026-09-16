@@ -21,14 +21,15 @@ ongoing transformation relationship (analysis → actions → progress → re-an
 
 ## Phased delivery (one PR per phase)
 
-1. **Data model foundation** ✅ *(this PR)* — schema for subscriptions, profile
+1. **Data model foundation** ✅ — schema for subscriptions, profile
    memory, webhook idempotency, analysis history. No behavior change.
-2. **Recurring billing backend** — Razorpay Subscriptions API + subscription
-   webhook lifecycle events + idempotent processing.
+2. **Recurring billing backend** ✅ *(this PR)* — Razorpay Subscriptions API +
+   subscription webhook lifecycle events + idempotent processing.
 3. **Centralized access control** — entitlement from subscription state; remove
    `?unlocked=true` as an auth path; grace period + cancel-at-period-end.
-4. **Pricing + copy transformation** — 3 new plans, honest recurring disclosure,
-   remove fake social proof, subscription-aware checkout.
+4. **Pricing + copy transformation** ✅ *(this PR)* — 3 new plans with anchor
+   pricing, honest recurring disclosure, remove fake social proof,
+   subscription-aware checkout.
 5. **Dashboard + transformation loop** — profile memory, re-analysis, daily
    actions, history, streaks.
 6. **AI cost architecture** — layered vision/text, cache appearance profile.
@@ -87,6 +88,40 @@ No Razorpay subscription calls, no access-control changes, no UI/copy changes.
 Those are Phases 2–4.
 
 ---
+
+## Phases 2 + 4 — Recurring billing + pricing UI (this PR)
+
+This PR brings the recurring-billing backend (Phase 2) together with the new
+pricing UI (Phase 4), so the product actually sells the three subscription
+plans end-to-end.
+
+### Recurring billing (Phase 2)
+- **`app/lib/subscriptions.js`** — subscription state logic + webhook idempotency
+  helpers (`claimWebhookEvent`/`finalizeWebhookEvent`).
+- **`scripts/create-razorpay-plans.mjs`** — one-time Razorpay Plan creation.
+- **`app/api/payment/create`** — creates a Razorpay **Subscription** (auth required).
+- **`app/api/payment/verify`** — verifies the subscription signature
+  (`payment_id|subscription_id`), records the initial payment.
+- **`app/api/webhook/razorpay`** — idempotent lifecycle handling + grace window.
+
+### Pricing UI + marketing (Phase 4)
+- **`app/lib/plans.js`** — added `anchorAmount` (crossed-out price),
+  `savingsLabel`, and annual `vsMonthlyNote`/`effectiveMonthly` for the
+  "good deal" framing:
+  - 7-Day: ~~₹499~~ **₹199 / 7 days** · 60% OFF
+  - Pro:   ~~₹1,499~~ **₹499 / month** · 67% OFF · MOST POPULAR
+  - Annual: ~~₹9,999~~ **₹5,499 / year** · 45% OFF · BEST VALUE · ₹458/mo
+- **`app/premium/page.js`** — rebuilt around the 3 subscription plans: anchor
+  pricing, savings badges, MOST POPULAR / BEST VALUE, **honest recurring
+  disclosure** ("charged X, renewing every …, cancel anytime"), no fake
+  testimonials (replaced with honest value props), subscription checkout flow.
+- **`app/components/Pricing.js`** — landing pricing rebuilt from `plans.js` with
+  the same anchor pricing + badges + "free analysis, cancel anytime" copy.
+
+### Not in this PR (by design)
+Access control still reads legacy "captured payment" logic in `/api/results`
+(Phase 3). Dashboard / transformation loop (Phase 5), AI cost tiers (Phase 6),
+reliability (Phase 7) and trust/age-gate (Phase 8) remain.
 
 ## Migration / ops notes
 
